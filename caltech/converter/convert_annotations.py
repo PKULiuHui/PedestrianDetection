@@ -62,3 +62,14 @@ for dname in sorted(glob.glob('../data/annotations/set*')):
 
 print('Number of objects:', all_obj)
 json.dump(data, open('../data/annotations.json', 'w'))
+
+newdata = defaultdict(dict)
+for set_name, video_set in zip(data.keys(), data.values()):
+    idx = int(set_name[3:])
+    for v_name, video in zip(video_set.keys(), video_set.values()):
+        frames = video['frames']
+        for i_frame, all_people in zip(frames.keys(), frames.values()):
+            i = int(i_frame)
+            if (idx <= 5 and i % 3 == 0) or (idx>5 and i % 30 == 0):
+                newdata['%s_%s_%s' % (set_name, v_name, i_frame)] = all_people
+json.dump(newdata, open('../data/consistent_annotations.json', 'w'))
