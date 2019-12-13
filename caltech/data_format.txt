@@ -1,0 +1,13 @@
+Data per object (indexed by integer id) includes the following fields:
+ init - 0/1 value indicating whether object w given id exists
+ lbl  - a string label describing object type (eg: 'pedestrian')
+ lbl : person / people / person-fa / person? 后面俩是啥还没看
+ str  - the first frame in which object appears (1 indexed)
+ end  - the last frame in which object appears (1 indexed)
+ hide - 0/1 value indicating object is 'hidden' (used during labeling)
+
+Data per object per frame (indexed by frame and id) includes:
+ pos  - [l t w h]: bb indicating predicted object extent
+ posv - [l t w h]: bb indicating visible region (may be [0 0 0 0])
+ occl - 0/1 value indicating if bb is occluded
+ lock - 0/1 value indicating bb is 'locked' (used during labeling)
