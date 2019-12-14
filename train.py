@@ -5,12 +5,7 @@ from torch.autograd import Variable
 from torchvision import transforms
 from model import *
 from utils import *
-from tqdm import trange
 from pre_proc import *
-import sys
-
-#sys.path.insert(0, './evaluate')
-#import evaluate
 
 N_CLASS = 1
 
@@ -185,5 +180,5 @@ def train():
 
 
 train()
-torch.save(rcnn.state_dict(), opt.data_path + 'hao123.mdl')
+torch.save(rcnn.state_dict(), opt.checkpoint_path + 'hao123.mdl')
 
