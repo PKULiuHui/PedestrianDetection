@@ -14,6 +14,7 @@ class Config:
     data_path = './caltech/data/'
     image_path = './caltech/data/images/'
     proposal_path = './caltech/data/proposals/'
+    checkpoint_path = './caltech/checkpoints/'
 
     annotation = json.loads(open(data_path + 'consistent_annotations.json', "rb").read())
     img_names = os.listdir(image_path)
