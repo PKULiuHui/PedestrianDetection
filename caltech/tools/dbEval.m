@@ -28,7 +28,6 @@ function dbEval
 %  filter   - expanded filtering (see 3.3 in PAMI11)
 exps = {
   'Reasonable',     [50 inf],  [.65 inf], 0,   .5,  1.25
-%{
   'All',            [20 inf],  [.2 inf],  0,   .5,  1.25
   'Scale=large',    [100 inf], [inf inf], 0,   .5,  1.25
   'Scale=near',     [80 inf],  [inf inf], 0,   .5,  1.25
@@ -46,7 +45,6 @@ exps = {
   'Expand=100',     [50 inf],  [.65 inf], 0,   .5,  1.00
   'Expand=125',     [50 inf],  [.65 inf], 0,   .5,  1.25
   'Expand=150',     [50 inf],  [.65 inf], 0,   .5,  1.50
-%}
   };
 exps=cell2struct(exps',{'name','hr','vr','ar','overlap','filter'});
 
@@ -293,10 +291,10 @@ for p=1:nPlots
   end
   if(~isempty(lgd1)), legend(h,lgd1,'Location','sw','FontSize',10); end
   % save figure to disk (uncomment pdfcrop commands to automatically crop)
-  [o,~]=system('pdfcrop'); if(o==127), setenv('PATH',...
-      [getenv('PATH') ':/Library/TeX/texbin/:/usr/local/bin/']); end
-  savefig(fName1,1,'pdf','-r300','-fonts'); close(1); f1=[fName1 '.pdf'];
-  system(['pdfcrop -margins ''-30 -20 -50 -10 '' ' f1 ' ' f1]);
+  % [o,~]=system('pdfcrop'); if(o==127), setenv('PATH',...
+  %     [getenv('PATH') ':/Library/TeX/texbin/:/usr/local/bin/']); end
+  % savefig(fName1,1,'pdf','-r300','-fonts'); close(1); f1=[fName1 '.pdf'];
+  % system(['pdfcrop -margins ''-30 -20 -50 -10 '' ' f1 ' ' f1]);
 end
 
 end
