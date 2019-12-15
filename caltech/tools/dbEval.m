@@ -47,7 +47,7 @@ exps = {
   'Expand=125',     [50 inf],  [.65 inf], 0,   .5,  1.25
   'Expand=150',     [50 inf],  [.65 inf], 0,   .5,  1.50
 %}
-};
+  };
 exps=cell2struct(exps',{'name','hr','vr','ar','overlap','filter'});
 
 % List of algorithms: { name, resize, color, style }

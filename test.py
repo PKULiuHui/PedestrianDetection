@@ -38,7 +38,7 @@ def load_data(idx):
         rois.append(rbboxes[j])
         orig_rois.append(bboxes[j])
 
-    test_img_info = {'img_size': img_size}
+    test_img_info = {'img_size': img_size, 'fname' : fname}
     return img, test_img_info, np.array(rois), np.array(orig_rois)
 
 def test_image(img, img_size, rois, orig_rois):
@@ -77,27 +77,55 @@ def test_image(img, img_size, rois, orig_rois):
 
     return np.array(res_bbox), np.array(res_cls)
 
-def test():
-    bbox_preds = []
-    bbox_cls = []
+def mkdir(path):
+    if not os.path.exists(path):
+        os.makedirs(path)
 
-    for i in range(Ntest):
-        bbox_preds.append(np.ndarray([0, 4]))
-        bbox_cls.append(np.ndarray([0, 1]))
+def output(preds):
+    result_dir = 'caltech/data/res/'
+    mkdir(result_dir)
+    result_dir += 'Ours/'
+    mkdir(result_dir)
+    for i in range(6,11):
+        mkdir(result_dir + 'set' + '%02d' % i)
+
+    res = dict()
+    for name in preds:
+        content = preds[name]
+        name = name.split('_')
+        fname = result_dir + name[0] + '/' + name[1] + '.txt'
+        frame = int(name[2])
+        content = list(content[0])
+        #l t r b ==> l t w h
+        content[2] -= content[0]
+        content[3] -= content[1]
+        content = [frame] + [round(x,2) for x in content]
+        if not fname in res:
+            res[fname] = [content]
+        else:
+            res[fname] += [content]
+
+    for fname in res:
+        content = res[fname]
+        content.sort()
+        #print(content)
+        content = [' '.join([str(y) for y in x]) for x in content]
+        with open(fname, 'w') as f:
+            f.write('\n'.join(content))
+
+def test():
+    bbox_preds = dict()
 
     with torch.no_grad():
         for i in trange(Ntest):
             test_img, info, rois, orig_rois = load_data(i)
             img = Variable(torch.from_numpy(test_img[np.newaxis,:]))
-
             img_size = info['img_size']
 
             res_bbox, res_cls = test_image(img, img_size, rois, orig_rois)
-            bbox_preds[i] = res_bbox
-            bbox_cls[i] = res_cls
+            bbox_preds[info['fname']] = res_bbox
 
-    #evaluate.evaluate(bbox_preds, bbox_cls)
-
+    output(bbox_preds)
     print('Test complete')
 
 rcnn = RCNN().cuda()
