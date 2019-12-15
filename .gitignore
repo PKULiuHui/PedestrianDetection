@@ -5,4 +5,6 @@
 *.DS_Store
 .idea/*
 caltech/data/*
+caltech/checkpoints/*
+caltech/tools/results/*
 __pycache__/*
