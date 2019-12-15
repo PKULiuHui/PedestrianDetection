@@ -1,4 +1,5 @@
 import numpy as np
+from time import time
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
@@ -16,15 +17,23 @@ rcnn = RCNN().cuda()
 print(rcnn)
 
 opt = Config()
+if not os.path.exists(opt.checkpoint_path):
+    os.mkdir(opt.checkpoint_path)
+with open(opt.log_path, 'w') as f:
+    f.write('N_iter: %d\n' % opt.n_iter)
+    f.write('Batch_size: %d\n' % opt.batch_size)
+    f.write('Pos_ratio: %.2f\n' % opt.pos_ratio)
+    f.write('Random_seed: %d\n\n' % opt.seed)
 train_anno = { x : opt.annotation[x] for x in opt.annotation if int(x[3:5]) <= 5}
 train_img_names = [x for x in opt.img_names if int(x[3:5])<=5]
 Ntotal = len(train_img_names)
 Ntrain = int(Ntotal * 0.8)
+np.random.seed(opt.seed)
 perm = np.random.permutation(Ntotal)
 
 optimizer = torch.optim.SGD(rcnn.parameters(), lr=5e-4)
 
-def load_data(Nimg, is_val):
+def load_data(n_pos, n_neg, is_val=False):
     # loading process for training and testing might be different
     imgs = []
     img_info = []
@@ -38,6 +47,7 @@ def load_data(Nimg, is_val):
         idx_l, idx_r = Ntrain, Ntotal
     gid = 0
 
+    pos_cnt, neg_cnt = 0, 0
     while 1:
         x = np.random.choice(range(idx_l, idx_r))
         img_name = train_img_names[perm[x]]
@@ -90,6 +100,9 @@ def load_data(Nimg, is_val):
                 cls.append(0)
             gid += 1
 
+        pos_cnt += len(pos_idx)
+        neg_cnt += len(neg_idx)
+
         pos_idx = np.array(pos_idx)
         neg_idx = np.array(neg_idx)
         imgs.append(img)
@@ -99,8 +112,8 @@ def load_data(Nimg, is_val):
             'neg_idx': neg_idx,
         })
 
-        Nimg -= 1
-        if Nimg == 0: break
+        if pos_cnt >= n_pos and neg_cnt >= n_neg:
+            break
 
     return np.array(imgs), img_info, np.array(roi), np.array(cls), np.array(tbboxes).astype(np.float32)
 
@@ -120,46 +133,41 @@ def train_batch(img, rois, ridx, gt_cls, gt_tbbox, is_val=False):
 
 def train():
     print(f'=====================start training======================')
-    I = 2
-    B = 80
-    POS = int(B * 0.25)
+
+    B = opt.batch_size
+    POS = int(B * opt.pos_ratio)
     NEG = B - POS
 
     is_val = False
 
-    # if is_val:
-        # rcnn.eval()
-    # else:
-        # rcnn.train()
-
     losses = []
     losses_sc = []
     losses_loc = []
-    for idx in range(1000):
-        train_imgs, infos, rois, gt_cls, gt_tbbox = load_data(I, is_val)
+    t0 = time()
+    for idx in range(1, opt.n_iter + 1):
+        train_imgs, infos, rois, gt_cls, gt_tbbox = load_data(POS, NEG)
         img = Variable(torch.from_numpy(train_imgs), volatile=is_val).cuda()
 
-        ridx = []
-        glo_ids = []
+        pos_idx, neg_idx, pos_ridx, neg_ridx = [], [], [], []
 
-        for j in range(I):
+        for j in range(len(train_imgs)):
             info = infos[j]
-            pos_idx = info['pos_idx']
-            neg_idx = info['neg_idx']
-            ids = []
+            pos_idx.extend(info['pos_idx'])
+            pos_ridx.extend([j] * len(info['pos_idx']))
+            neg_idx.extend(info['neg_idx'])
+            neg_ridx.extend([j] * len(info['neg_idx']))
 
-            if len(pos_idx) > 0:
-                ids.append(np.random.choice(pos_idx, size=POS)) #np.random.choice allows duplicate
-            if len(neg_idx) > 0:
-                ids.append(np.random.choice(neg_idx, size=NEG))
-            if len(ids) == 0:
-                continue
-            ids = np.concatenate(ids, axis=0)
-            glo_ids.extend(ids)
-            ridx += [j] * ids.shape[0]
+        pos_sample = np.random.choice(range(len(pos_idx)), POS, replace=False)
+        neg_sample = np.random.choice(range(len(neg_idx)), NEG, replace=False)
 
-        if len(ridx) == 0:
-            continue
+        ridx, glo_ids = [], []
+        for s in pos_sample:
+            ridx.append(pos_ridx[s])
+            glo_ids.append(pos_idx[s])
+        for s in neg_sample:
+            ridx.append(neg_ridx[s])
+            glo_ids.append(neg_idx[s])
+
         glo_ids = np.array(glo_ids)
         ridx = np.array(ridx)
 
@@ -172,13 +180,72 @@ def train():
         losses_sc.append(loss_sc)
         losses_loc.append(loss_loc)
 
-        if idx % 500 == 0:
+        if idx % opt.print_every == 0:
             avg_loss = np.mean(losses)
             avg_loss_sc = np.mean(losses_sc)
             avg_loss_loc = np.mean(losses_loc)
-            print(f'Iter {idx}: Avg loss = {avg_loss:.4f}; loss_sc = {avg_loss_sc:.4f}, loss_loc = {avg_loss_loc:.4f}')
+            t = time() - t0
+            print(f'Iter {idx}: Avg loss = {avg_loss:.4f}, loss_sc = {avg_loss_sc:.4f}, loss_loc = {avg_loss_loc:.4f}, time = {t:.4f}')
+
+            if idx % opt.save_every == 0:  # save_every % print_every == 0
+                l, l_sc, l_loc, t = valid(POS, NEG)
+                print(f'Iter {idx}: Avg loss = {l:.4f}, loss_sc = {l_sc:.4f}, loss_loc = {l_loc:.4f}, time = {t:.4f}')
+                with open(opt.log_path, 'a+') as f:
+                    f.write(f'Train Iter {idx}: Avg loss = {avg_loss:.4f}, loss_sc = {avg_loss_sc:.4f}, loss_loc = {avg_loss_loc:.4f}\n')
+                    f.write(f'Valid Iter {idx}: Avg loss = {l:.4f}, loss_sc = {l_sc:.4f}, loss_loc = {l_loc:.4f}\n')
+                print('Saving checkpoint...')
+                torch.save(rcnn.state_dict(), opt.checkpoint_path + 'iter_%d.mdl' % idx)
+            t0 = time()
+            losses, losses_sc, loss_loc = [], [], []
 
 
-train()
-torch.save(rcnn.state_dict(), opt.checkpoint_path + 'hao123.mdl')
+def valid(POS, NEG):
+    print('Start to valid...')
+    is_val = False
+    rcnn.eval()
+    losses = []
+    losses_sc = []
+    losses_loc = []
+    t0 = time()
+    for idx in range(opt.valid_iter):
+        valid_imgs, infos, rois, gt_cls, gt_tbbox = load_data(POS, NEG, is_val=True)
+        img = Variable(torch.from_numpy(valid_imgs), volatile=is_val).cuda()
+
+        pos_idx, neg_idx, pos_ridx, neg_ridx = [], [], [], []
+
+        for j in range(len(valid_imgs)):
+            info = infos[j]
+            pos_idx.extend(info['pos_idx'])
+            pos_ridx.extend([j] * len(info['pos_idx']))
+            neg_idx.extend(info['neg_idx'])
+            neg_ridx.extend([j] * len(info['neg_idx']))
+
+        pos_sample = np.random.choice(range(len(pos_idx)), POS, replace=False)
+        neg_sample = np.random.choice(range(len(neg_idx)), NEG, replace=False)
+
+        ridx, glo_ids = [], []
+        for s in pos_sample:
+            ridx.append(pos_ridx[s])
+            glo_ids.append(pos_idx[s])
+        for s in neg_sample:
+            ridx.append(neg_ridx[s])
+            glo_ids.append(neg_idx[s])
+
+        glo_ids = np.array(glo_ids)
+        ridx = np.array(ridx)
+
+        rois = rois[glo_ids]
+        gt_cls = Variable(torch.from_numpy(gt_cls[glo_ids]).long(), volatile=is_val).cuda()
+        gt_tbbox = Variable(torch.from_numpy(gt_tbbox[glo_ids]), volatile=is_val).cuda()
+
+        loss, loss_sc, loss_loc = train_batch(img, rois, ridx, gt_cls, gt_tbbox, is_val=is_val)
+        losses.append(loss)
+        losses_sc.append(loss_sc)
+        losses_loc.append(loss_loc)
+    rcnn.train()
+    return np.mean(losses), np.mean(losses_sc), np.mean(loss_loc), time() - t0
+
+
+if __name__ == '__main__':
+    train()
 
