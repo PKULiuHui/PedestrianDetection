@@ -28,14 +28,17 @@ function dbEval
 %  filter   - expanded filtering (see 3.3 in PAMI11)
 exps = {
   'Reasonable',     [50 inf],  [.65 inf], 0,   .5,  1.25
+%{
   'All',            [20 inf],  [.2 inf],  0,   .5,  1.25
   'Scale=large',    [100 inf], [inf inf], 0,   .5,  1.25
   'Scale=near',     [80 inf],  [inf inf], 0,   .5,  1.25
   'Scale=medium',   [30 80],   [inf inf], 0,   .5,  1.25
   'Scale=far',      [20 30],   [inf inf], 0,   .5,  1.25
   'Occ=none',       [50 inf],  [inf inf], 0,   .5,  1.25
+ %}
   'Occ=partial',    [50 inf],  [.65 1],   0,   .5,  1.25
   'Occ=heavy',      [50 inf],  [.2 .65],  0,   .5,  1.25
+%{
   'Ar=all',         [50 inf],  [inf inf], 0,   .5,  1.25
   'Ar=typical',     [50 inf],  [inf inf],  .1, .5,  1.25
   'Ar=atypical',    [50 inf],  [inf inf], -.1, .5,  1.25
@@ -45,6 +48,7 @@ exps = {
   'Expand=100',     [50 inf],  [.65 inf], 0,   .5,  1.00
   'Expand=125',     [50 inf],  [.65 inf], 0,   .5,  1.25
   'Expand=150',     [50 inf],  [.65 inf], 0,   .5,  1.50
+%}
   };
 exps=cell2struct(exps',{'name','hr','vr','ar','overlap','filter'});
 
@@ -138,6 +142,7 @@ algs = {
   'ADM',              0, clrs(74,:),  '-'
   'ShearFtrs',        0, clrs(75,:),  '--'
   'AR-Ped',           0, clrs(76,:),  '-'
+  'Ours',             0, clrs(77,:),  '-'
   };
 algs=cell2struct(algs',{'name','resize','color','style'});
 
