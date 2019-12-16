@@ -6,7 +6,7 @@ from tqdm import trange
 from utils import *
 import os
 import random
-from vis_tool import vis_bbox
+# from vis_tool import vis_bbox
 import matplotlib.pyplot as plt
 
 ### Train
@@ -14,7 +14,15 @@ class Config:
     data_path = './caltech/data/'
     image_path = './caltech/data/images/'
     proposal_path = './caltech/data/proposals/'
-    checkpoint_path = './caltech/checkpoints/'
+    checkpoint_path = './caltech/ckpt20/'
+    log_path = checkpoint_path + 'log.txt'
+    print_every = 500
+    save_every = 10000
+    seed = 1
+    batch_size = 160
+    pos_ratio = 0.25
+    n_iter = 90000
+    valid_iter = 100
 
     annotation = json.loads(open(data_path + 'consistent_annotations.json', "rb").read())
     img_names = os.listdir(image_path)
