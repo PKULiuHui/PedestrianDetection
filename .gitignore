@@ -6,5 +6,6 @@
 .idea/*
 caltech/data/*
 caltech/checkpoints/*
+caltech/ckpt20/*
 caltech/tools/results/*
 __pycache__/*

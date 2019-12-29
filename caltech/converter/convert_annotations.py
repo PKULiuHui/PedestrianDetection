@@ -70,6 +70,6 @@ for set_name, video_set in zip(data.keys(), data.values()):
         frames = video['frames']
         for i_frame, all_people in zip(frames.keys(), frames.values()):
             i = int(i_frame)
-            if (idx <= 5 and i % 3 == 0) or (idx>5 and i % 30 == 0):
+            if (idx <= 5 and i % 3 == 2) or (idx>5 and i % 30 == 29):
                 newdata['%s_%s_%s' % (set_name, v_name, i_frame)] = all_people
 json.dump(newdata, open('../data/consistent_annotations.json', 'w'))

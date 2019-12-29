@@ -26,7 +26,6 @@ def vis_image(img, ax=None):
 def vis_bbox(img, bbox, label=None, score=None, ax=None, color='red'):
     #bbox input: l, t, r, b
 
-    label_names = ['pedestrian'] + ['bg']
     # add for index `-1`
     if label is not None and not len(bbox) == len(label):
         raise ValueError('The length of label must be same as that of bbox')
@@ -49,11 +48,8 @@ def vis_bbox(img, bbox, label=None, score=None, ax=None, color='red'):
 
         caption = list()
 
-        if label is not None and label_names is not None:
-            lb = label[i]
-            if not (-1 <= lb < len(label_names)):  # modfy here to add backgroud
-                raise ValueError('No corresponding name is given')
-            caption.append(label_names[lb])
+        if label is not None:
+            caption.append(label[i])
         if score is not None:
             sc = score[i]
             caption.append('{:.2f}'.format(sc))

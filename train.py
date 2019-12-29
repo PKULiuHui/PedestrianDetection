@@ -1,17 +1,12 @@
 import numpy as np
 from time import time
-import torch
-import torch.nn as nn
-from torch.autograd import Variable
+from torch.optim.lr_scheduler import LambdaLR
 from torchvision import transforms
 from model import *
 from utils import *
 from pre_proc import *
 
 N_CLASS = 1
-
-Transform = transforms.Compose([transforms.ToTensor(),
-                                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
 
 rcnn = RCNN().cuda()
 print(rcnn)
@@ -32,6 +27,7 @@ np.random.seed(opt.seed)
 perm = np.random.permutation(Ntotal)
 
 optimizer = torch.optim.SGD(rcnn.parameters(), lr=5e-4)
+#scheduler = LambdaLR(optimizer, lr_lambda=[lambda epoch: 0.1 ** (epoch // 45000)])
 
 def load_data(n_pos, n_neg, is_val=False):
     # loading process for training and testing might be different
@@ -54,13 +50,15 @@ def load_data(n_pos, n_neg, is_val=False):
         fname = img_name[:-4]
         if not (fname in train_anno): continue
         info = train_anno[fname]
-        bboxes = get_proposals(opt.proposal_path + 'train/' + fname + '.txt')
+        bboxes = get_proposals(opt.proposal_path + fname + '.txt')
         bboxes = bboxes[:, :4]
         nroi = len(bboxes)
         gt_boxes = []
+        gt_lbls = []
 
         for person in info:
             bbox = person['pos']
+            #if person['lbl'] != 'person': continue
             if bbox[3] < 50: continue
             if person['occl'] == 1:
                 # filter bboxes which are occluded more than 70%
@@ -73,6 +71,7 @@ def load_data(n_pos, n_neg, is_val=False):
                 if w2 * h2 / (w1 * h1) <= 0.3: continue
             bbox = np.array([bbox[0], bbox[1], bbox[0] + bbox[2], bbox[1] + bbox[3]])  # l, t, w, h ==> l, t, r, b
             gt_boxes.append(bbox)
+            gt_lbls.append(person['lbl'])
         gt_boxes = np.array(gt_boxes)
         # maybe incorrect: images without positive examples are not included
         if len(gt_boxes) == 0: continue
@@ -105,7 +104,7 @@ def load_data(n_pos, n_neg, is_val=False):
 
         pos_idx = np.array(pos_idx)
         neg_idx = np.array(neg_idx)
-        imgs.append(img)
+        imgs.append(img.unsqueeze(0))
         img_info.append({
             'img_size': img_size,
             'pos_idx': pos_idx,
@@ -115,10 +114,10 @@ def load_data(n_pos, n_neg, is_val=False):
         if pos_cnt >= n_pos and neg_cnt >= n_neg:
             break
 
-    return np.array(imgs), img_info, np.array(roi), np.array(cls), np.array(tbboxes).astype(np.float32)
+    return torch.cat(imgs,dim=0), img_info, np.array(roi), np.array(cls), np.array(tbboxes).astype(np.float32)
 
 def train_batch(img, rois, ridx, gt_cls, gt_tbbox, is_val=False):
-    sc, r_bbox = rcnn(img, rois, ridx)
+    sc, r_bbox = rcnn(img, rois, ridx)#, gt_cls)
     loss, loss_sc, loss_loc = rcnn.calc_loss(sc, r_bbox, gt_cls, gt_tbbox)
     #print(loss.data.cpu().numpy())
     fl = loss.data.cpu().numpy()
@@ -129,6 +128,7 @@ def train_batch(img, rois, ridx, gt_cls, gt_tbbox, is_val=False):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+        #scheduler.step()
     return fl, fl_sc, fl_loc
 
 def train():
@@ -146,7 +146,7 @@ def train():
     t0 = time()
     for idx in range(1, opt.n_iter + 1):
         train_imgs, infos, rois, gt_cls, gt_tbbox = load_data(POS, NEG)
-        img = Variable(torch.from_numpy(train_imgs), volatile=is_val).cuda()
+        img = train_imgs.cuda()
 
         pos_idx, neg_idx, pos_ridx, neg_ridx = [], [], [], []
 
@@ -172,9 +172,8 @@ def train():
         ridx = np.array(ridx)
 
         rois = rois[glo_ids]
-        gt_cls = Variable(torch.from_numpy(gt_cls[glo_ids]).long(), volatile=is_val).cuda()
-        gt_tbbox = Variable(torch.from_numpy(gt_tbbox[glo_ids]), volatile=is_val).cuda()
-
+        gt_cls = Variable(torch.from_numpy(gt_cls[glo_ids]).long()).cuda()
+        gt_tbbox = Variable(torch.from_numpy(gt_tbbox[glo_ids])).cuda()
         loss, loss_sc, loss_loc = train_batch(img, rois, ridx, gt_cls, gt_tbbox, is_val=is_val)
         losses.append(loss)
         losses_sc.append(loss_sc)
@@ -201,7 +200,7 @@ def train():
 
 def valid(POS, NEG):
     print('Start to valid...')
-    is_val = False
+    is_val = True
     rcnn.eval()
     losses = []
     losses_sc = []
@@ -209,7 +208,7 @@ def valid(POS, NEG):
     t0 = time()
     for idx in range(opt.valid_iter):
         valid_imgs, infos, rois, gt_cls, gt_tbbox = load_data(POS, NEG, is_val=True)
-        img = Variable(torch.from_numpy(valid_imgs), volatile=is_val).cuda()
+        img = valid_imgs.cuda()
 
         pos_idx, neg_idx, pos_ridx, neg_ridx = [], [], [], []
 
@@ -235,8 +234,8 @@ def valid(POS, NEG):
         ridx = np.array(ridx)
 
         rois = rois[glo_ids]
-        gt_cls = Variable(torch.from_numpy(gt_cls[glo_ids]).long(), volatile=is_val).cuda()
-        gt_tbbox = Variable(torch.from_numpy(gt_tbbox[glo_ids]), volatile=is_val).cuda()
+        gt_cls = Variable(torch.from_numpy(gt_cls[glo_ids]).long()).cuda()
+        gt_tbbox = Variable(torch.from_numpy(gt_tbbox[glo_ids])).cuda()
 
         loss, loss_sc, loss_loc = train_batch(img, rois, ridx, gt_cls, gt_tbbox, is_val=is_val)
         losses.append(loss)

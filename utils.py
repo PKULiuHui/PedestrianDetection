@@ -10,6 +10,23 @@ def rel_bbox(size, bbox):
     bbox[:,3] /= size[1]
     return bbox
 
+def calc_ious(ex_rois, gt_rois):
+    ex_area = (1. + ex_rois[:,2] - ex_rois[:,0]) * (1. + ex_rois[:,3] - ex_rois[:,1])
+    gt_area = (1. + gt_rois[:,2] - gt_rois[:,0]) * (1. + gt_rois[:,3] - gt_rois[:,1])
+    area_sum = ex_area.reshape((-1, 1)) + gt_area.reshape((1, -1))
+
+    lb = np.maximum(ex_rois[:,0].reshape((-1, 1)), gt_rois[:,0].reshape((1, -1)))
+    rb = np.minimum(ex_rois[:,2].reshape((-1, 1)), gt_rois[:,2].reshape((1, -1)))
+    tb = np.maximum(ex_rois[:,1].reshape((-1, 1)), gt_rois[:,1].reshape((1, -1)))
+    ub = np.minimum(ex_rois[:,3].reshape((-1, 1)), gt_rois[:,3].reshape((1, -1)))
+
+    width = np.maximum(1. + rb - lb, 0.)
+    height = np.maximum(1. + ub - tb, 0.)
+    area_i = width * height
+    area_u = area_sum - area_i
+    ious = area_i / area_u
+    return ious
+
 def bbox_transform(ex_rois, gt_rois):
     ex_widths = ex_rois[:,2] - ex_rois[:,0] + 1.0
     ex_heights = ex_rois[:,3] - ex_rois[:,1] + 1.0
@@ -28,23 +45,6 @@ def bbox_transform(ex_rois, gt_rois):
 
     targets = np.array([targets_dx, targets_dy, targets_dw, targets_dh]).T
     return targets
-
-def calc_ious(ex_rois, gt_rois):
-    ex_area = (1. + ex_rois[:,2] - ex_rois[:,0]) * (1. + ex_rois[:,3] - ex_rois[:,1])
-    gt_area = (1. + gt_rois[:,2] - gt_rois[:,0]) * (1. + gt_rois[:,3] - gt_rois[:,1])
-    area_sum = ex_area.reshape((-1, 1)) + gt_area.reshape((1, -1))
-
-    lb = np.maximum(ex_rois[:,0].reshape((-1, 1)), gt_rois[:,0].reshape((1, -1)))
-    rb = np.minimum(ex_rois[:,2].reshape((-1, 1)), gt_rois[:,2].reshape((1, -1)))
-    tb = np.maximum(ex_rois[:,1].reshape((-1, 1)), gt_rois[:,1].reshape((1, -1)))
-    ub = np.minimum(ex_rois[:,3].reshape((-1, 1)), gt_rois[:,3].reshape((1, -1)))
-
-    width = np.maximum(1. + rb - lb, 0.)
-    height = np.maximum(1. + ub - tb, 0.)
-    area_i = width * height
-    area_u = area_sum - area_i
-    ious = area_i / area_u
-    return ious
 
 def reg_to_bbox(img_size, reg, box):
     img_width, img_height = img_size
@@ -78,16 +78,18 @@ def non_maximum_suppression(sc, bboxs, iou_threshold=0.7, score_threshold=0.6):
     while rb < nroi and sc[idx[rb]] >= score_threshold:
         rb += 1
     if rb == 0:
-        return []
+        return [], []
     idx = idx[:rb]
     sc = sc[idx]
     bboxs = bboxs[idx,:]
     ious = calc_ious(bboxs, bboxs)
 
-    res = []
+    res_box = []
+    res_score = []
     for i in range(rb):
         if i == 0 or ious[i, :i].max() < iou_threshold:
-            res.append(bboxs[i])
+            res_box.append(bboxs[i])
+            res_score.append(sc[i])
 
-    return res
+    return res_box, res_score
 

@@ -1,21 +1,13 @@
 import numpy as np
-import torch
-import torch.nn as nn
-from torch.autograd import Variable
-from torchvision import transforms
 from model import *
 from utils import *
 from tqdm import trange
 from pre_proc import *
-import sys
+from vis_tool import *
 
-#sys.path.insert(0, './evaluate')
-#import evaluate
 
 N_CLASS = 1
 
-Transform = transforms.Compose([transforms.ToTensor(),
-                                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
 opt = Config()
 test_anno = { x : opt.annotation[x] for x in opt.annotation if int(x[3:5]) > 5 }
 test_img_names = [x for x in opt.img_names if int(x[3:5]) > 5]
@@ -27,11 +19,11 @@ def load_data(idx):
 
     img_name = test_img_names[idx]
     fname = img_name[:-4]
-    bboxes = get_proposals(opt.proposal_path + 'test/' + fname + '.txt')
-    bboxes = bboxes[:, :4]
+    bboxes = get_proposals(opt.proposal_path + fname + '.txt')
     nroi = len(bboxes)
     img, img_size = get_image(opt.image_path + img_name)
 
+    #bboxes = bboxes[:, :4]
     rbboxes = rel_bbox(img_size, bboxes)
 
     for j in range(nroi):
@@ -46,36 +38,37 @@ def test_image(img, img_size, rois, orig_rois):
     ridx = np.zeros(nroi).astype(int)
     img = img.cuda()
     sc, tbbox = rcnn(img, rois, ridx)
-    sc = nn.functional.softmax(sc)
+    sc = nn.functional.softmax(sc, dim=1)
     sc = sc.data.cpu().numpy()
     tbbox = tbbox.data.cpu().numpy()
     bboxs = reg_to_bbox(img_size, tbbox, orig_rois)
+    #rois = rois[:, np.newaxis, :]
+    #rois = rois.repeat(N_CLASS + 1, axis=1)
+    #bboxs = reg_to_bbox(img_size, rois, orig_rois)
 
     res_bbox = []
-    res_cls = []
+    res_score = []
 
-    for c in range(1, N_CLASS+1):
+    c = 1
+    c_sc = sc[:,c]
+    c_bboxs = bboxs[:,c,:]
+
+    boxes, scores = non_maximum_suppression(c_sc, c_bboxs, iou_threshold=0.3, score_threshold=0.7)
+    res_bbox.extend(boxes)
+    res_score.extend(scores)
+
+    if len(res_bbox) == 0:
         c_sc = sc[:,c]
         c_bboxs = bboxs[:,c,:]
 
-        boxes = non_maximum_suppression(c_sc, c_bboxs, iou_threshold=0.3, score_threshold=0.6)
+        boxes, scores = non_maximum_suppression(c_sc, c_bboxs, iou_threshold=0.1, score_threshold=0.3)
         res_bbox.extend(boxes)
-        res_cls.extend([c] * len(boxes))
+        res_score.extend(scores)
 
-    if len(res_cls) == 0:
-        for c in range(1, N_CLASS+1):
-            c_sc = sc[:,c]
-            c_bboxs = bboxs[:,c,:]
-
-            boxes = non_maximum_suppression(c_sc, c_bboxs, iou_threshold=0.3, score_threshold=0.3)
-            res_bbox.extend(boxes)
-            res_cls.extend([c] * len(boxes))
         res_bbox = res_bbox[:1]
-        res_cls = res_cls[:1]
+        res_score = res_score[:1]
 
-    #print(res_cls)
-
-    return np.array(res_bbox), np.array(res_cls)
+    return np.array(res_bbox), np.array(res_score)
 
 def mkdir(path):
     if not os.path.exists(path):
@@ -94,16 +87,15 @@ def output(preds):
         content = preds[name]
         name = name.split('_')
         fname = result_dir + name[0] + '/' + name[1] + '.txt'
-        frame = int(name[2])
-        content = list(content[0])
-        #l t r b ==> l t w h
-        content[2] -= content[0]
-        content[3] -= content[1]
-        content = [frame] + [round(x,2) for x in content]
-        if not fname in res:
-            res[fname] = [content]
-        else:
-            res[fname] += [content]
+        frame = int(name[2]) + 1
+        if len(content)==0: continue
+        for box in content:
+            #l t r b ==> l t w h
+            box = [frame] + [round(x,2) for x in box]
+            if not fname in res:
+                res[fname] = [box]
+            else:
+                res[fname] += [box]
 
     for fname in res:
         content = res[fname]
@@ -119,15 +111,33 @@ def test():
     with torch.no_grad():
         for i in trange(Ntest):
             test_img, info, rois, orig_rois = load_data(i)
-            img = Variable(torch.from_numpy(test_img[np.newaxis,:]))
+            #img = Variable(torch.from_numpy(test_img[np.newaxis,:]))
+            img = test_img.unsqueeze(0)
             img_size = info['img_size']
 
-            res_bbox, res_cls = test_image(img, img_size, rois, orig_rois)
+            res_bbox, res_score = test_image(img, img_size, rois, orig_rois)
+            if len(res_bbox)==0: continue
+
+            '''plt.figure()
+            ax1 = plt.subplot(111)
+            #abboxes = bboxes[bboxes[:, 4] >= 0.3, :]
+            img_name = info['fname']+'.jpg'
+            img1 = Image.open(opt.image_path + img_name)
+            img1 = np.transpose(np.array(img1).astype(np.float32), [2, 0, 1])
+            vis_bbox(img=img1, bbox=res_bbox, score=res_score, ax=ax1)
+            plt.show()'''
+
+            res_bbox = np.concatenate([res_bbox, res_score.reshape(-1,1)], axis=1)
+            #res_bbox = np.concatenate([np.array(boxes), np.array(scores).reshape(-1,1)], axis=1)
+            #print(res_bbox)
+            #exit(0)
+            res_bbox[:, 2] -= res_bbox[:, 0]
+            res_bbox[:, 3] -= res_bbox[:, 1]
             bbox_preds[info['fname']] = res_bbox
 
     output(bbox_preds)
     print('Test complete')
 
 rcnn = RCNN().cuda()
-rcnn.load_state_dict(torch.load(opt.checkpoint_path + 'hao123.mdl'))
+rcnn.load_state_dict(torch.load(opt.checkpoint_path + 'iter_90000.mdl'))
 test()

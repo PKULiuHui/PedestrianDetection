@@ -14,7 +14,7 @@ def save_img(dname, fn, i, frame):
 out_dir = '../data/images'
 if not os.path.exists(out_dir):
     os.makedirs(out_dir)
-for idx, dname in enumerate(sorted(glob.glob('../data/set*'))):
+for idx, dname in enumerate(sorted(glob.glob('../data/videos/set*'))):
     for fn in sorted(glob.glob('{}/*.seq'.format(dname))):
         cap = cv.VideoCapture(fn)
         i = 0
@@ -22,9 +22,9 @@ for idx, dname in enumerate(sorted(glob.glob('../data/set*'))):
             ret, frame = cap.read()
             if not ret:
                 break
-            if idx <= 5 and i % 3 == 0:
+            if idx <= 5 and i % 3 == 2:
                 save_img(dname, fn, i, frame)
-            elif idx > 5 and i % 30 == 0:
+            elif idx > 5 and i % 30 == 29:
                 save_img(dname, fn, i, frame)
             i += 1
         print(fn)

@@ -3,6 +3,8 @@ import torch
 import torch.nn as nn
 import torchvision
 from torch.autograd import Variable
+from pre_proc import Config
+opt = Config()
 
 class SlowROIPool(nn.Module):
     def __init__(self, output_size):
@@ -23,7 +25,8 @@ class SlowROIPool(nn.Module):
         x2 = np.ceil(x2 * w).astype(int)
         y1 = np.floor(y1 * h).astype(int)
         y2 = np.ceil(y2 * h).astype(int)
-        
+
+        #print(images.shape, roi_idx)
         res = []
         for i in range(n):
             img = images[roi_idx[i]].unsqueeze(0)
@@ -56,11 +59,10 @@ class RCNN(nn.Module):
         self.cel = nn.CrossEntropyLoss()
         self.sl1 = nn.SmoothL1Loss()
 
-    def forward(self, inp, rois, ridx):
-        res = inp
-        res = self.seq(res)
+    def forward(self, inp, rois, ridx):#, labels):
+        res = self.seq(inp)
         res = self.roipool(res, rois, ridx)
-        res = res.detach()
+        #res = res.detach() #may be incorrect: vgg's parameters are not updated
         res = res.view(res.size(0), -1)
         feat = self.feature(res)
 
@@ -72,8 +74,7 @@ class RCNN(nn.Module):
         loss_sc = self.cel(probs, labels)
         lbl = labels.view(-1, 1, 1).expand(labels.size(0), 1, 4)
         mask = (labels != 0).float().view(-1, 1).expand(labels.size(0), 4)
-        loss_loc = self.sl1(bbox.gather(1, lbl).squeeze(1) * mask, gt_bbox * mask)
+        loss_loc = self.sl1(bbox.gather(1, lbl).squeeze(1) * mask, gt_bbox * mask) / opt.pos_ratio
         lmb = 1.0
         loss = loss_sc + lmb * loss_loc
         return loss, loss_sc, loss_loc
-
