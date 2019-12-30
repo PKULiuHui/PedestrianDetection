@@ -139,5 +139,6 @@ def test():
     print('Test complete')
 
 rcnn = RCNN().cuda()
-rcnn.load_state_dict(torch.load(opt.checkpoint_path + 'iter_30000.mdl'))
+rcnn.load_state_dict(torch.load(opt.checkpoint_path + 'iter_40000.mdl'))
+rcnn.eval()
 test()

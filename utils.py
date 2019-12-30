@@ -50,8 +50,8 @@ def bbox_transform(ex_rois, gt_rois):
 
 def reg_to_bbox(img_size, reg, box):
     img_width, img_height = img_size
-    bbox_width = box[:, 2] - box[:, 0] + 1.0
-    bbox_height = box[:, 3] - box[:, 1] + 1.0
+    bbox_width = box[:, 2] - box[:, 0]
+    bbox_height = box[:, 3] - box[:, 1]
     bbox_ctr_x = box[:, 0] + 0.5 * bbox_width
     bbox_ctr_y = box[:, 1] + 0.5 * bbox_height
 
