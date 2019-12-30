@@ -4,7 +4,9 @@ import torch.nn as nn
 import torchvision
 from torch.autograd import Variable
 from pre_proc import Config
+
 opt = Config()
+
 
 class SlowROIPool(nn.Module):
     def __init__(self, output_size):
@@ -14,19 +16,22 @@ class SlowROIPool(nn.Module):
 
     def forward(self, images, rois, roi_idx):
         n = rois.shape[0]
-        h = images.size(2)
-        w = images.size(3)
-        x1 = rois[:,0]
-        y1 = rois[:,1]
-        x2 = rois[:,2]
-        y2 = rois[:,3]
+        h = images.size(2)  # 30, original 480
+        w = images.size(3)  # 40, original 640
 
+        # Proposal bbox use [640, 480], but Network input use [480, 640]
+        x1 = rois[:, 0]
+        y1 = rois[:, 1]
+        x2 = rois[:, 2]
+        y2 = rois[:, 3]
+
+        # x * w, y * h is correct, don't need to change!
         x1 = np.floor(x1 * w).astype(int)
         x2 = np.ceil(x2 * w).astype(int)
         y1 = np.floor(y1 * h).astype(int)
         y2 = np.ceil(y2 * h).astype(int)
 
-        #print(images.shape, roi_idx)
+        # print(images.shape, roi_idx)
         res = []
         for i in range(n):
             img = images[roi_idx[i]].unsqueeze(0)
@@ -38,6 +43,8 @@ class SlowROIPool(nn.Module):
 
 
 N_CLASS = 1
+
+
 class RCNN(nn.Module):
     def __init__(self):
         super().__init__()
@@ -47,8 +54,7 @@ class RCNN(nn.Module):
         # self.roipool = nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2), dilation=(1, 1))
         self.roipool = SlowROIPool(output_size=(7, 7))
         self.feature = nn.Sequential(*list(rawnet.classifier.children())[:-1])
-
-        _x = Variable(torch.Tensor(1, 3, 224, 224))
+        _x = Variable(torch.Tensor(1, 3, 480, 640))
         _r = np.array([[0., 0., 1., 1.]])
         _ri = np.array([0])
         _x = self.feature(self.roipool(self.seq(_x), _r, _ri).view(1, -1))
@@ -59,7 +65,7 @@ class RCNN(nn.Module):
         self.cel = nn.CrossEntropyLoss()
         self.sl1 = nn.SmoothL1Loss()
 
-    def forward(self, inp, rois, ridx):#, labels):
+    def forward(self, inp, rois, ridx):  # , labels):
         res = self.seq(inp)
         res = self.roipool(res, rois, ridx)
         #res = res.detach() #may be incorrect: vgg's parameters are not updated
@@ -74,7 +80,7 @@ class RCNN(nn.Module):
         loss_sc = self.cel(probs, labels)
         lbl = labels.view(-1, 1, 1).expand(labels.size(0), 1, 4)
         mask = (labels != 0).float().view(-1, 1).expand(labels.size(0), 4)
-        loss_loc = self.sl1(bbox.gather(1, lbl).squeeze(1) * mask, gt_bbox * mask) / opt.pos_ratio
+        loss_loc = self.sl1(bbox.gather(1, lbl).squeeze(1) * mask, gt_bbox * mask)
         lmb = 1.0
         loss = loss_sc + lmb * loss_loc
         return loss, loss_sc, loss_loc

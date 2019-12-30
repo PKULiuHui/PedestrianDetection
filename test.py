@@ -53,10 +53,10 @@ def test_image(img, img_size, rois, orig_rois):
     c_sc = sc[:,c]
     c_bboxs = bboxs[:,c,:]
 
-    boxes, scores = non_maximum_suppression(c_sc, c_bboxs, iou_threshold=0.3, score_threshold=0.7)
+    boxes, scores = non_maximum_suppression(c_sc, c_bboxs, iou_threshold=0.5, score_threshold=0.0)
     res_bbox.extend(boxes)
     res_score.extend(scores)
-
+    """
     if len(res_bbox) == 0:
         c_sc = sc[:,c]
         c_bboxs = bboxs[:,c,:]
@@ -67,7 +67,7 @@ def test_image(img, img_size, rois, orig_rois):
 
         res_bbox = res_bbox[:1]
         res_score = res_score[:1]
-
+    """
     return np.array(res_bbox), np.array(res_score)
 
 def mkdir(path):
@@ -139,5 +139,5 @@ def test():
     print('Test complete')
 
 rcnn = RCNN().cuda()
-rcnn.load_state_dict(torch.load(opt.checkpoint_path + 'iter_90000.mdl'))
+rcnn.load_state_dict(torch.load(opt.checkpoint_path + 'iter_30000.mdl'))
 test()

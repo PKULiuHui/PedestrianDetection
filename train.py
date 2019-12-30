@@ -19,15 +19,17 @@ with open(opt.log_path, 'w') as f:
     f.write('Batch_size: %d\n' % opt.batch_size)
     f.write('Pos_ratio: %.2f\n' % opt.pos_ratio)
     f.write('Random_seed: %d\n\n' % opt.seed)
-train_anno = { x : opt.annotation[x] for x in opt.annotation if int(x[3:5]) <= 5}
-train_img_names = [x for x in opt.img_names if int(x[3:5])<=5]
+train_anno = {x: opt.annotation[x] for x in opt.annotation if int(x[3:5]) <= 5}
+train_img_names = [x for x in opt.img_names if int(x[3:5]) <= 5]
 Ntotal = len(train_img_names)
 Ntrain = int(Ntotal * 0.8)
 np.random.seed(opt.seed)
 perm = np.random.permutation(Ntotal)
 
 optimizer = torch.optim.SGD(rcnn.parameters(), lr=5e-4)
-#scheduler = LambdaLR(optimizer, lr_lambda=[lambda epoch: 0.1 ** (epoch // 45000)])
+
+
+# scheduler = LambdaLR(optimizer, lr_lambda=[lambda epoch: 0.1 ** (epoch // 45000)])
 
 def load_data(n_pos, n_neg, is_val=False):
     # loading process for training and testing might be different
@@ -35,7 +37,7 @@ def load_data(n_pos, n_neg, is_val=False):
     img_info = []
     roi = []
     cls = []
-    tbboxes = []    #tbbox : target bbox
+    tbboxes = []  # tbbox : target bbox
 
     if not is_val:
         idx_l, idx_r = 0, Ntrain
@@ -58,7 +60,7 @@ def load_data(n_pos, n_neg, is_val=False):
 
         for person in info:
             bbox = person['pos']
-            #if person['lbl'] != 'person': continue
+            # if person['lbl'] != 'person': continue
             if bbox[3] < 50: continue
             if person['occl'] == 1:
                 # filter bboxes which are occluded more than 70%
@@ -77,7 +79,6 @@ def load_data(n_pos, n_neg, is_val=False):
         if len(gt_boxes) == 0: continue
 
         img, img_size = get_image(opt.image_path + img_name)
-
         rbboxes = rel_bbox(img_size, bboxes)
         ious = calc_ious(bboxes, gt_boxes)
         max_ious = ious.max(axis=1)
@@ -114,12 +115,13 @@ def load_data(n_pos, n_neg, is_val=False):
         if pos_cnt >= n_pos and neg_cnt >= n_neg:
             break
 
-    return torch.cat(imgs,dim=0), img_info, np.array(roi), np.array(cls), np.array(tbboxes).astype(np.float32)
+    return torch.cat(imgs, dim=0), img_info, np.array(roi), np.array(cls), np.array(tbboxes).astype(np.float32)
+
 
 def train_batch(img, rois, ridx, gt_cls, gt_tbbox, is_val=False):
-    sc, r_bbox = rcnn(img, rois, ridx)#, gt_cls)
+    sc, r_bbox = rcnn(img, rois, ridx)  # , gt_cls)
     loss, loss_sc, loss_loc = rcnn.calc_loss(sc, r_bbox, gt_cls, gt_tbbox)
-    #print(loss.data.cpu().numpy())
+    # print(loss.data.cpu().numpy())
     fl = loss.data.cpu().numpy()
     fl_sc = loss_sc.data.cpu().numpy()
     fl_loc = loss_loc.data.cpu().numpy()
@@ -128,8 +130,9 @@ def train_batch(img, rois, ridx, gt_cls, gt_tbbox, is_val=False):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        #scheduler.step()
+        # scheduler.step()
     return fl, fl_sc, fl_loc
+
 
 def train():
     print(f'=====================start training======================')
@@ -172,8 +175,8 @@ def train():
         ridx = np.array(ridx)
 
         rois = rois[glo_ids]
-        gt_cls = Variable(torch.from_numpy(gt_cls[glo_ids]).long()).cuda()
-        gt_tbbox = Variable(torch.from_numpy(gt_tbbox[glo_ids])).cuda()
+        gt_cls = torch.LongTensor(gt_cls[glo_ids]).cuda()
+        gt_tbbox = torch.FloatTensor(gt_tbbox[glo_ids]).cuda()
         loss, loss_sc, loss_loc = train_batch(img, rois, ridx, gt_cls, gt_tbbox, is_val=is_val)
         losses.append(loss)
         losses_sc.append(loss_sc)
@@ -184,13 +187,15 @@ def train():
             avg_loss_sc = np.mean(losses_sc)
             avg_loss_loc = np.mean(losses_loc)
             t = time() - t0
-            print(f'Iter {idx}: Avg loss = {avg_loss:.4f}, loss_sc = {avg_loss_sc:.4f}, loss_loc = {avg_loss_loc:.4f}, time = {t:.4f}')
+            print(
+                f'Iter {idx}: Avg loss = {avg_loss:.4f}, loss_sc = {avg_loss_sc:.4f}, loss_loc = {avg_loss_loc:.4f}, time = {t:.4f}')
 
             if idx % opt.save_every == 0:  # save_every % print_every == 0
                 l, l_sc, l_loc, t = valid(POS, NEG)
                 print(f'Iter {idx}: Avg loss = {l:.4f}, loss_sc = {l_sc:.4f}, loss_loc = {l_loc:.4f}, time = {t:.4f}')
                 with open(opt.log_path, 'a+') as f:
-                    f.write(f'Train Iter {idx}: Avg loss = {avg_loss:.4f}, loss_sc = {avg_loss_sc:.4f}, loss_loc = {avg_loss_loc:.4f}\n')
+                    f.write(
+                        f'Train Iter {idx}: Avg loss = {avg_loss:.4f}, loss_sc = {avg_loss_sc:.4f}, loss_loc = {avg_loss_loc:.4f}\n')
                     f.write(f'Valid Iter {idx}: Avg loss = {l:.4f}, loss_sc = {l_sc:.4f}, loss_loc = {l_loc:.4f}\n')
                 print('Saving checkpoint...')
                 torch.save(rcnn.state_dict(), opt.checkpoint_path + 'iter_%d.mdl' % idx)
@@ -234,8 +239,8 @@ def valid(POS, NEG):
         ridx = np.array(ridx)
 
         rois = rois[glo_ids]
-        gt_cls = Variable(torch.from_numpy(gt_cls[glo_ids]).long()).cuda()
-        gt_tbbox = Variable(torch.from_numpy(gt_tbbox[glo_ids])).cuda()
+        gt_cls = torch.LongTensor(gt_cls[glo_ids]).cuda()
+        gt_tbbox = torch.FloatTensor(gt_tbbox[glo_ids]).cuda()
 
         loss, loss_sc, loss_loc = train_batch(img, rois, ridx, gt_cls, gt_tbbox, is_val=is_val)
         losses.append(loss)
@@ -247,4 +252,3 @@ def valid(POS, NEG):
 
 if __name__ == '__main__':
     train()
-

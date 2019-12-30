@@ -14,7 +14,7 @@ class Config:
     data_path = './caltech/data/'
     image_path = './caltech/data/images/'
     proposal_path = './caltech/data/proposals/'
-    checkpoint_path = './caltech/ckpt20/'
+    checkpoint_path = './caltech/test/'
     log_path = checkpoint_path + 'log.txt'
     print_every = 500
     save_every = 10000
@@ -22,7 +22,7 @@ class Config:
     batch_size = 160
     pos_ratio = 0.25
     n_iter = 90000
-    valid_iter = 100
+    valid_iter = 500
 
     annotation = json.loads(open(data_path + 'consistent_annotations.json', "rb").read())
     img_names = os.listdir(image_path)
@@ -45,7 +45,7 @@ def get_image(fname):
     img_size = img.size
     # print(img_size)
     # img = img.resize((224, 224))
-    img = np.array(img).astype(np.float32) / 255.0
-    # img = np.transpose(img, [2, 0, 1])
+    # img = np.array(img).astype(np.float32) / 255.0
+    # img = np.transpose(img1, [2, 0, 1])
     img = Transform(img)
     return img, img_size
