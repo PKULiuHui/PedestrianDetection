@@ -49,7 +49,7 @@ class RCNN(nn.Module):
     def __init__(self):
         super().__init__()
 
-        rawnet = torchvision.models.vgg16_bn(pretrained=True)
+        rawnet = torchvision.models.vgg16(pretrained=True)
         self.seq = nn.Sequential(*list(rawnet.features.children())[:-1])
         # self.roipool = nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2), dilation=(1, 1))
         self.roipool = SlowROIPool(output_size=(7, 7))
@@ -60,7 +60,7 @@ class RCNN(nn.Module):
         _x = self.feature(self.roipool(self.seq(_x), _r, _ri).view(1, -1))
         feature_dim = _x.size(1)
         self.cls_score = nn.Linear(feature_dim, N_CLASS + 1)
-        self.bbox = nn.Linear(feature_dim, 4 * (N_CLASS + 1))
+        self.bbox = nn.Linear(feature_dim, 4)
 
         self.cel = nn.CrossEntropyLoss()
         self.sl1 = nn.SmoothL1Loss()
@@ -73,7 +73,8 @@ class RCNN(nn.Module):
         feat = self.feature(res)
 
         cls_score = self.cls_score(feat)
-        bbox = self.bbox(feat).view(-1, N_CLASS + 1, 4)
+        bbox = self.bbox(feat).view(-1, 1, 4).repeat(1, 2, 1)
+        # bbox = self.bbox(feat).view(-1, 2, 4)
         return cls_score, bbox
 
     def calc_loss(self, probs, bbox, labels, gt_bbox):
@@ -81,6 +82,6 @@ class RCNN(nn.Module):
         lbl = labels.view(-1, 1, 1).expand(labels.size(0), 1, 4)
         mask = (labels != 0).float().view(-1, 1).expand(labels.size(0), 4)
         loss_loc = self.sl1(bbox.gather(1, lbl).squeeze(1) * mask, gt_bbox * mask)
-        lmb = 1.0
+        lmb = 100.0
         loss = loss_sc + lmb * loss_loc
         return loss, loss_sc, loss_loc

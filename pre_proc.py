@@ -14,15 +14,16 @@ class Config:
     data_path = './caltech/data/'
     image_path = './caltech/data/images/'
     proposal_path = './caltech/data/proposals/'
-    checkpoint_path = './caltech/test/'
+    checkpoint_path = './caltech/vgg16_lmb100_long/'
     log_path = checkpoint_path + 'log.txt'
     print_every = 500
     save_every = 10000
-    seed = 123
+    seed = 1
     batch_size = 160
     pos_ratio = 0.25
-    n_iter = 90000
-    valid_iter = 500
+    n_iter = 200000
+    valid_iter = 100
+    include_empty_image = True
 
     annotation = json.loads(open(data_path + 'consistent_annotations.json', "rb").read())
     img_names = os.listdir(image_path)

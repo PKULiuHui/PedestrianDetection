@@ -143,6 +143,11 @@ algs = {
   'ShearFtrs',        0, clrs(75,:),  '--'
   'AR-Ped',           0, clrs(76,:),  '-'
   'Ours',             0, clrs(77,:),  '-'
+  'vgg16',            0, clrs(78,:),  '-'
+  'vgg16_lmb20',      0, clrs(79,:),  '-'
+  'vgg16_empty',      0, clrs(80,:),  '-'
+  'vgg16_lmb100',     0, clrs(81,:),  '-'
+  'vgg16_lmb100_long',0, clrs(82,:),  '-'
   };
 algs=cell2struct(algs',{'name','resize','color','style'});
 

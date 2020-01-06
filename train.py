@@ -1,5 +1,6 @@
 import numpy as np
 from time import time
+import torch
 from torch.optim.lr_scheduler import LambdaLR
 from torchvision import transforms
 from model import *
@@ -7,11 +8,10 @@ from utils import *
 from pre_proc import *
 
 N_CLASS = 1
-
+opt = Config()
 rcnn = RCNN().cuda()
 print(rcnn)
 
-opt = Config()
 if not os.path.exists(opt.checkpoint_path):
     os.mkdir(opt.checkpoint_path)
 with open(opt.log_path, 'w') as f:
@@ -22,8 +22,10 @@ with open(opt.log_path, 'w') as f:
 train_anno = {x: opt.annotation[x] for x in opt.annotation if int(x[3:5]) <= 5}
 train_img_names = [x for x in opt.img_names if int(x[3:5]) <= 5]
 Ntotal = len(train_img_names)
-Ntrain = int(Ntotal * 0.8)
+Ntrain = int(Ntotal * 0.9)
 np.random.seed(opt.seed)
+torch.manual_seed(opt.seed)
+torch.cuda.manual_seed(opt.seed)
 perm = np.random.permutation(Ntotal)
 
 optimizer = torch.optim.SGD(rcnn.parameters(), lr=5e-4)
@@ -45,7 +47,7 @@ def load_data(n_pos, n_neg, is_val=False):
         idx_l, idx_r = Ntrain, Ntotal
     gid = 0
 
-    pos_cnt, neg_cnt = 0, 0
+    pos_cnt, neg_cnt, n_img = 0, 0, 0
     while 1:
         x = np.random.choice(range(idx_l, idx_r))
         img_name = train_img_names[perm[x]]
@@ -75,8 +77,12 @@ def load_data(n_pos, n_neg, is_val=False):
             gt_boxes.append(bbox)
             gt_lbls.append(person['lbl'])
         gt_boxes = np.array(gt_boxes)
-        # maybe incorrect: images without positive examples are not included
-        if len(gt_boxes) == 0: continue
+        # optional: include at most 4 empty image
+        if len(gt_boxes) == 0 and opt.include_empty_image and n_img < 5:
+            n_img += 1
+            gt_boxes = np.array([[.0, .0, .0, .0]])
+        elif len(gt_boxes) == 0:
+            continue
 
         img, img_size = get_image(opt.image_path + img_name)
         rbboxes = rel_bbox(img_size, bboxes)
@@ -148,6 +154,9 @@ def train():
     losses_loc = []
     t0 = time()
     for idx in range(1, opt.n_iter + 1):
+        if idx == 450001:
+            for param_group in optimizer.param_groups:
+                param_group['lr'] /= 10.0
         train_imgs, infos, rois, gt_cls, gt_tbbox = load_data(POS, NEG)
         img = train_imgs.cuda()
 
@@ -170,9 +179,14 @@ def train():
         for s in neg_sample:
             ridx.append(neg_ridx[s])
             glo_ids.append(neg_idx[s])
-
         glo_ids = np.array(glo_ids)
         ridx = np.array(ridx)
+
+        # shuffle in batch
+        rand_idx = np.array(range(len(ridx)))
+        np.random.shuffle(rand_idx)
+        glo_ids = glo_ids[rand_idx]
+        ridx = ridx[rand_idx]
 
         rois = rois[glo_ids]
         gt_cls = torch.LongTensor(gt_cls[glo_ids]).cuda()
