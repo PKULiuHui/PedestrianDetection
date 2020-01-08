@@ -9,25 +9,30 @@ import random
 # from vis_tool import vis_bbox
 import matplotlib.pyplot as plt
 
-### Train
+
+# Train
 class Config:
     data_path = './caltech/data/'
     image_path = './caltech/data/images/'
     proposal_path = './caltech/data/proposals/'
-    checkpoint_path = './caltech/vgg16_lmb100_long/'
+    checkpoint_path = './caltech/no_attn/'
     log_path = checkpoint_path + 'log.txt'
     print_every = 500
     save_every = 10000
     seed = 1
     batch_size = 160
     pos_ratio = 0.25
-    n_iter = 200000
+    n_iter = 90000
     valid_iter = 100
     include_empty_image = True
+    attention = False
+    lmb_loc = 100
+    lmb_attn = 5e-6
 
     annotation = json.loads(open(data_path + 'consistent_annotations.json', "rb").read())
     img_names = os.listdir(image_path)
     print('In total there are {} annotations'.format(len(annotation)))
+
 
 def get_proposals(fname):
     file = open(fname, 'rb')
@@ -37,9 +42,12 @@ def get_proposals(fname):
         proposals[i] = np.array([float(y) for y in x.split('\\t')])
     return np.array(proposals)
 
+
 from torchvision import transforms
+
 Transform = transforms.Compose([transforms.ToTensor(),
                                 transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
+
 
 def get_image(fname):
     img = Image.open(fname)

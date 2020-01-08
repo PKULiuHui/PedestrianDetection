@@ -126,11 +126,6 @@ def calc_ious(ex_rois, gt_rois):
     return ious
 
 
-def fix_bbox():
-
-
-
 if __name__ == '__main__':
-    # generate_gt_files()
-    # generate_pp_files()
-    fix_bbox()
+    generate_gt_files()
+    generate_pp_files()

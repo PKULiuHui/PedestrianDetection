@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 
 
 def rel_bbox(size, bbox):
@@ -46,6 +47,15 @@ def bbox_transform(ex_rois, gt_rois):
 
     targets = np.array([targets_dx, targets_dy, targets_dw, targets_dh]).T
     return targets
+
+
+def gt_attn(img_size, gt_rois, factor=16):
+    attn = np.zeros(img_size)
+    for roi in gt_rois:
+        l, t, r, b = int(round(roi[0])), int(round(roi[1])), int(round(roi[2])), int(round(roi[3]))
+        attn[l:r, t:b] = 1
+    attn = attn[0:img_size[0]:factor, 0:img_size[1]:factor]
+    return torch.FloatTensor(attn).transpose(0, 1)
 
 
 def reg_to_bbox(img_size, reg, box):

@@ -9,3 +9,4 @@ caltech/checkpoints/*
 caltech/ckpt20/*
 caltech/tools/results/*
 __pycache__/*
+*.pdf

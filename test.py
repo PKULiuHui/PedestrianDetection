@@ -39,7 +39,7 @@ def test_image(img, img_size, rois, orig_rois):
     nroi = rois.shape[0]
     ridx = np.zeros(nroi).astype(int)
     img = img.cuda()
-    sc, tbbox = rcnn(img, rois, ridx)
+    sc, tbbox, _ = rcnn(img, rois, ridx)
     # sc = nn.functional.softmax(sc, dim=1)
     sc = sc.data.cpu().numpy()
     tbbox = tbbox.data.cpu().numpy()

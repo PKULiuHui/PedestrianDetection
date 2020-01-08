@@ -31,8 +31,6 @@ perm = np.random.permutation(Ntotal)
 optimizer = torch.optim.SGD(rcnn.parameters(), lr=5e-4)
 
 
-# scheduler = LambdaLR(optimizer, lr_lambda=[lambda epoch: 0.1 ** (epoch // 45000)])
-
 def load_data(n_pos, n_neg, is_val=False):
     # loading process for training and testing might be different
     imgs = []
@@ -40,6 +38,7 @@ def load_data(n_pos, n_neg, is_val=False):
     roi = []
     cls = []
     tbboxes = []  # tbbox : target bbox
+    attns = []
 
     if not is_val:
         idx_l, idx_r = 0, Ntrain
@@ -47,8 +46,8 @@ def load_data(n_pos, n_neg, is_val=False):
         idx_l, idx_r = Ntrain, Ntotal
     gid = 0
 
-    pos_cnt, neg_cnt, n_img = 0, 0, 0
-    while 1:
+    pos_cnt, neg_cnt, n_empty = 0, 0, 0
+    while True:
         x = np.random.choice(range(idx_l, idx_r))
         img_name = train_img_names[perm[x]]
         fname = img_name[:-4]
@@ -78,8 +77,8 @@ def load_data(n_pos, n_neg, is_val=False):
             gt_lbls.append(person['lbl'])
         gt_boxes = np.array(gt_boxes)
         # optional: include at most 4 empty image
-        if len(gt_boxes) == 0 and opt.include_empty_image and n_img < 5:
-            n_img += 1
+        if len(gt_boxes) == 0 and opt.include_empty_image and n_empty < 5:
+            n_empty += 1
             gt_boxes = np.array([[.0, .0, .0, .0]])
         elif len(gt_boxes) == 0:
             continue
@@ -90,6 +89,8 @@ def load_data(n_pos, n_neg, is_val=False):
         max_ious = ious.max(axis=1)
         max_idx = ious.argmax(axis=1)
         tbbox = bbox_transform(bboxes, gt_boxes[max_idx])
+        # compute ground truth attention weight
+        attn = gt_attn(img_size, gt_boxes)
 
         pos_idx = []
         neg_idx = []
@@ -97,7 +98,6 @@ def load_data(n_pos, n_neg, is_val=False):
         for j in range(nroi):
             roi.append(rbboxes[j])
             tbboxes.append(tbbox[j])
-
             if max_ious[j] >= 0.5:
                 pos_idx.append(gid)
                 cls.append(1)
@@ -117,27 +117,28 @@ def load_data(n_pos, n_neg, is_val=False):
             'pos_idx': pos_idx,
             'neg_idx': neg_idx,
         })
+        attns.append(attn.unsqueeze(0))
 
         if pos_cnt >= n_pos and neg_cnt >= n_neg:
             break
 
-    return torch.cat(imgs, dim=0), img_info, np.array(roi), np.array(cls), np.array(tbboxes).astype(np.float32)
+    return torch.cat(imgs, dim=0), img_info, np.array(roi), np.array(cls), np.array(tbboxes).astype(np.float32), torch.cat(attns, dim=0)
 
 
-def train_batch(img, rois, ridx, gt_cls, gt_tbbox, is_val=False):
-    sc, r_bbox = rcnn(img, rois, ridx)  # , gt_cls)
-    loss, loss_sc, loss_loc = rcnn.calc_loss(sc, r_bbox, gt_cls, gt_tbbox)
+def train_batch(img, rois, ridx, gt_cls, gt_tbbox, gt_attns, is_val=False):
+    sc, r_bbox, attns = rcnn(img, rois, ridx)
+    loss, loss_sc, loss_loc, loss_a = rcnn.calc_loss(sc, r_bbox, attns, gt_cls, gt_tbbox, gt_attns)
     # print(loss.data.cpu().numpy())
     fl = loss.data.cpu().numpy()
     fl_sc = loss_sc.data.cpu().numpy()
     fl_loc = loss_loc.data.cpu().numpy()
+    fl_a = loss_a.data.cpu().numpy()
 
     if not is_val:
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        # scheduler.step()
-    return fl, fl_sc, fl_loc
+    return fl, fl_sc, fl_loc, fl_a
 
 
 def train():
@@ -149,16 +150,15 @@ def train():
 
     is_val = False
 
-    losses = []
-    losses_sc = []
-    losses_loc = []
+    losses, losses_sc, losses_loc, losses_a = [], [], [], []
     t0 = time()
     for idx in range(1, opt.n_iter + 1):
         if idx == 450001:
             for param_group in optimizer.param_groups:
                 param_group['lr'] /= 10.0
-        train_imgs, infos, rois, gt_cls, gt_tbbox = load_data(POS, NEG)
+        train_imgs, infos, rois, gt_cls, gt_tbbox, gt_attns = load_data(POS, NEG)
         img = train_imgs.cuda()
+        gt_attns = gt_attns.cuda()
 
         pos_idx, neg_idx, pos_ridx, neg_ridx = [], [], [], []
 
@@ -191,26 +191,26 @@ def train():
         rois = rois[glo_ids]
         gt_cls = torch.LongTensor(gt_cls[glo_ids]).cuda()
         gt_tbbox = torch.FloatTensor(gt_tbbox[glo_ids]).cuda()
-        loss, loss_sc, loss_loc = train_batch(img, rois, ridx, gt_cls, gt_tbbox, is_val=is_val)
+        loss, loss_sc, loss_loc, loss_a = train_batch(img, rois, ridx, gt_cls, gt_tbbox, gt_attns, is_val=is_val)
         losses.append(loss)
         losses_sc.append(loss_sc)
         losses_loc.append(loss_loc)
+        losses_a.append(loss_a)
 
         if idx % opt.print_every == 0:
             avg_loss = np.mean(losses)
             avg_loss_sc = np.mean(losses_sc)
             avg_loss_loc = np.mean(losses_loc)
+            avg_loss_a = np.mean(losses_a)
             t = time() - t0
-            print(
-                f'Iter {idx}: Avg loss = {avg_loss:.4f}, loss_sc = {avg_loss_sc:.4f}, loss_loc = {avg_loss_loc:.4f}, time = {t:.4f}')
+            print(f'Iter {idx}: loss = {avg_loss:.4f}, loss_sc = {avg_loss_sc:.4f}, loss_loc = {avg_loss_loc:.4f}, loss_a = {avg_loss_a:.4f}, time = {t:.4f}')
 
             if idx % opt.save_every == 0:  # save_every % print_every == 0
-                l, l_sc, l_loc, t = valid(POS, NEG)
-                print(f'Iter {idx}: Avg loss = {l:.4f}, loss_sc = {l_sc:.4f}, loss_loc = {l_loc:.4f}, time = {t:.4f}')
+                l, l_sc, l_loc, l_a, t = valid(POS, NEG)
+                print(f'Iter {idx}: loss = {l:.4f}, loss_sc = {l_sc:.4f}, loss_loc = {l_loc:.4f}, loss_a = {l_a:.4f}, time = {t:.4f}')
                 with open(opt.log_path, 'a+') as f:
-                    f.write(
-                        f'Train Iter {idx}: Avg loss = {avg_loss:.4f}, loss_sc = {avg_loss_sc:.4f}, loss_loc = {avg_loss_loc:.4f}\n')
-                    f.write(f'Valid Iter {idx}: Avg loss = {l:.4f}, loss_sc = {l_sc:.4f}, loss_loc = {l_loc:.4f}\n')
+                    f.write(f'Train Iter {idx}: loss = {avg_loss:.4f}, loss_sc = {avg_loss_sc:.4f}, loss_loc = {avg_loss_loc:.4f}, loss_a = {avg_loss_a:.4f}\n')
+                    f.write(f'Valid Iter {idx}: loss = {l:.4f}, loss_sc = {l_sc:.4f}, loss_loc = {l_loc:.4f}, loss_a = {l_a:.4f}\n')
                 print('Saving checkpoint...')
                 torch.save(rcnn.state_dict(), opt.checkpoint_path + 'iter_%d.mdl' % idx)
             t0 = time()
@@ -221,13 +221,12 @@ def valid(POS, NEG):
     print('Start to valid...')
     is_val = True
     rcnn.eval()
-    losses = []
-    losses_sc = []
-    losses_loc = []
+    losses, losses_sc, losses_loc, losses_a = [], [], [], []
     t0 = time()
     for idx in range(opt.valid_iter):
-        valid_imgs, infos, rois, gt_cls, gt_tbbox = load_data(POS, NEG, is_val=True)
+        valid_imgs, infos, rois, gt_cls, gt_tbbox, gt_attns = load_data(POS, NEG, is_val=True)
         img = valid_imgs.cuda()
+        gt_attns = gt_attns.cuda()
 
         pos_idx, neg_idx, pos_ridx, neg_ridx = [], [], [], []
 
@@ -256,12 +255,13 @@ def valid(POS, NEG):
         gt_cls = torch.LongTensor(gt_cls[glo_ids]).cuda()
         gt_tbbox = torch.FloatTensor(gt_tbbox[glo_ids]).cuda()
 
-        loss, loss_sc, loss_loc = train_batch(img, rois, ridx, gt_cls, gt_tbbox, is_val=is_val)
+        loss, loss_sc, loss_loc, loss_a = train_batch(img, rois, ridx, gt_cls, gt_tbbox, gt_attns, is_val=is_val)
         losses.append(loss)
         losses_sc.append(loss_sc)
         losses_loc.append(loss_loc)
+        losses_a.append(loss_a)
     rcnn.train()
-    return np.mean(losses), np.mean(losses_sc), np.mean(loss_loc), time() - t0
+    return np.mean(losses), np.mean(losses_sc), np.mean(losses_loc), np.mean(losses_a), time() - t0
 
 
 if __name__ == '__main__':
