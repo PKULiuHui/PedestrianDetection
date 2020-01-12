@@ -68,7 +68,7 @@ class RCNN(nn.Module):
                 nn.Sigmoid(),
             )
             self.mse = nn.MSELoss(reduction='sum')
-        '''self.trans = nn.Sequential(
+        self.trans = nn.Sequential(
             nn.Conv2d(512, 512, 3, padding=1),
             nn.ReLU(inplace=True),
             nn.Conv2d(512, 512, 3, padding=1),
@@ -78,7 +78,7 @@ class RCNN(nn.Module):
             nn.Conv2d(512, 512, 1),
         )
         self.cls_trans = nn.Sequential(*list(rawnet.classifier.children())[:-1],
-                                       nn.Linear(4096, N_CLASS + 1))'''
+                                       nn.Linear(4096, N_CLASS + 1))
 
     def forward(self, inp, rois, ridx, type):  # , labels):
         res = self.seq(inp)
