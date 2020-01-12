@@ -54,8 +54,31 @@ def gt_attn(img_size, gt_rois, factor=16):
     for roi in gt_rois:
         l, t, r, b = int(round(roi[0])), int(round(roi[1])), int(round(roi[2])), int(round(roi[3]))
         attn[l:r, t:b] = 1
-    attn = attn[0:img_size[0]:factor, 0:img_size[1]:factor]
+    attn = attn[8:img_size[0]:factor, 8:img_size[1]:factor]
     return torch.FloatTensor(attn).transpose(0, 1)
+
+def get_gt_boxes(info):
+    gt_boxes = []
+    gt_occls = []
+
+    for person in info:
+        bbox = person['pos']
+        # if person['lbl'] != 'person': continue
+        if bbox[3] < 50: continue
+        if person['occl'] == 1:
+            # filter bboxes which are occluded more than 70%
+            vbbox = person['posv']
+            if isinstance(vbbox, int):
+                # it seems that sometimes 'posv' is mixed up with 'lock'
+                vbbox = person['lock']
+                assert isinstance(vbbox, list) and len(vbbox) == 4
+            w1, h1, w2, h2 = bbox[2], bbox[3], vbbox[2], vbbox[3]
+            if w2 * h2 / (w1 * h1) <= 0.3: continue
+        bbox = np.array([bbox[0], bbox[1], bbox[0] + bbox[2], bbox[1] + bbox[3]])  # l, t, w, h ==> l, t, r, b
+        gt_boxes.append(bbox)
+        gt_occls.append(person['occl'])
+    gt_boxes = np.array(gt_boxes)
+    return gt_boxes, gt_occls
 
 
 def reg_to_bbox(img_size, reg, box):

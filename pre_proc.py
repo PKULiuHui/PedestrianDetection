@@ -15,8 +15,10 @@ class Config:
     data_path = './caltech/data/'
     image_path = './caltech/data/images/'
     proposal_path = './caltech/data/proposals/'
-    checkpoint_path = './caltech/no_attn/'
+    checkpoint_path = './caltech/attn/'
     log_path = checkpoint_path + 'log.txt'
+    after_trans_path = './caltech/after_trans/'
+    model_path = './caltech/no_attn/iter_90000.mdl'
     print_every = 500
     save_every = 10000
     seed = 1
@@ -24,10 +26,13 @@ class Config:
     pos_ratio = 0.25
     n_iter = 90000
     valid_iter = 100
-    include_empty_image = True
+    include_empty_image = False
     attention = False
+    transformation = False
     lmb_loc = 100
     lmb_attn = 5e-6
+    lmb_trans = 1
+    s1, tau1, s2, tau2 = 0.9, 0.7, 0.01, 0.1
 
     annotation = json.loads(open(data_path + 'consistent_annotations.json', "rb").read())
     img_names = os.listdir(image_path)

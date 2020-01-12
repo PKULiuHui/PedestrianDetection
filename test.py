@@ -39,7 +39,7 @@ def test_image(img, img_size, rois, orig_rois):
     nroi = rois.shape[0]
     ridx = np.zeros(nroi).astype(int)
     img = img.cuda()
-    sc, tbbox, _ = rcnn(img, rois, ridx)
+    sc, tbbox = rcnn(img, rois, ridx, 'test')
     # sc = nn.functional.softmax(sc, dim=1)
     sc = sc.data.cpu().numpy()
     tbbox = tbbox.data.cpu().numpy()
@@ -76,7 +76,7 @@ def output(preds):
     mkdir(result_dir)
 
     if fix == '':
-        result_dir += opt.checkpoint_path[10:]
+        result_dir += opt.model_path.split('/')[2] + '/'
     else:
         result_dir += fix + '/'
     mkdir(result_dir)
@@ -132,7 +132,8 @@ def test():
     print('Test complete')
 
 
-rcnn = RCNN().cuda()
-rcnn.load_state_dict(torch.load(opt.checkpoint_path + 'iter_90000.mdl'))
-rcnn.eval()
-test()
+if __name__ == '__main__':
+    rcnn = RCNN().cuda()
+    rcnn.load_state_dict(torch.load(opt.model_path))
+    rcnn.eval()
+    test()
