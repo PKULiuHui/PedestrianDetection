@@ -383,6 +383,6 @@ def prep_trans():
 
 
 if __name__ == '__main__':
-    #train('train_rcnn')
+    train('train_rcnn')
     prep_trans()
     train('train_trans')
